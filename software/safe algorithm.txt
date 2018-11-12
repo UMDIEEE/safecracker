@@ -1,0 +1,79 @@
+Include bipolar stepper motor library
+Ccw is positive direction
+Cw is negative direction
+Global
+Int digit0, digit1, digit2;
+Int where; //is the motor at right now in dial distances
+
+Setup:
+const int stepsPerRevolution = 400;
+0.9 degrees per step
+Stepper stepper(stepsPerRevolution, 8. 9, 10, 11);
+Set motor speed to at least 60 rpm (stepper.speed(60);)
+Spin dial to zero
+
+
+Loop:
+
+// x is the first digit
+// y is the second digit
+// z is the third digit
+
+for (int x = 0; x <= 99; x = x + 3)
+ 	for (y = 0; y <= 99; y = y + 3)
+for  (z = 0; z <= 99; z = z + 3)
+
+// Dial 3 combinations 
+			
+			//reset
+			stepper.step(4*stepsPerRevolution)
+
+//spin ccw to x
+stepper.step(x)
+
+//Spin cw to y
+// Spin back to 0
+stepper.step(-x)
+			stepper.step(2*stepsPerRevolution) 
+			stepper.step(-y)
+
+			//Spin ccw to z
+			//Spin back to 0
+			stepper.step(y)
+			stepper.step(stepsPerRevolution)
+			stepper.step(z)
+
+
+			//Spin 2 time cw 
+			stepper.step(-2*stepsPerRevolution)
+	`		
+
+			if(<stalled>)
+				Break into method (send notification, record digits, and stop)
+				Return (x,y,z)
+
+			// Victory lap
+			Print (xyz)
+			
+TODO:
+	Add calibration check (photogate)
+	Think about not having to reset dial
+	
+
+
+Int next distance (int distance){
+	
+}
+
+gotoPos(int dialposition, int direction, int spincount)
+	Distancetomove = (Dialposition - where) % 100 + spincount * 100; //think long and hard
+	Int distances = 0;
+	while(distances<distancetomove)
+		step(4*direction);
+//do we have to wait?
+		distances++;
+		Where++ % 400;
+		If (at zero according to the photogate)
+			if(where we think we are  != 0)
+				Where we are = 0;
+
