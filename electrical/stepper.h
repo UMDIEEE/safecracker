@@ -37,11 +37,11 @@ void Stepper(int steps, int microsteps, int enable, int pulse, int dir) {
   driver.microsteps = microsteps;
 
   driver.rpm = 60;
-  
+
   pinMode(driver.enable, OUTPUT);
   pinMode(driver.pulse, OUTPUT);
   pinMode(driver.dir, OUTPUT);
-  
+
   //driver is ALWAYS enabled
   digitalWrite(driver.enable, HIGH);
   return;
@@ -75,15 +75,15 @@ For the steps we need to step for
   int dir = steps / abs(steps);
   float delaytime = (float) 1000*60000 / (float) (driver.rpm * (float) driver.steps * (float) driver.microsteps * 2);
 //  Serial.println((unsigned int) delaytime);
-  
+
   if(dir == 1) { // spin ccw (high)
     digitalWrite(driver.dir, HIGH);
   } else { // spin cw (low)
     digitalWrite(driver.dir, LOW);
   }
-  
+
   delayMicroseconds(300); // at LEAST 25 us setup time on one tested driver
-  
+
   for(i = 0; i < absSteps * driver.microsteps; i++) {
     digitalWrite(driver.enable, HIGH);
     digitalWrite(driver.pulse, HIGH);

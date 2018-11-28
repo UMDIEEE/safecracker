@@ -3,6 +3,15 @@
 /// Uses stepper.h as provided in the Electrical folder
 ////////////////////////////////
 
+
+/*
+ *  NOTE: for some reason, step() will not move the motor
+ *   for values >= 1000 (or <= -1000);
+ *   Will have to add modify spin() to just spin whole revolutions and then whatever is left over
+ * Also, this code does have a few small bugs in the algorithm and in the testing code
+ * Any other changes that need to be made should be committed to the UMDIEEE github
+ */
+
 #include <math.h>
 #include "stepper.h"
 
@@ -40,7 +49,7 @@ void spin( int32_t delta )
 	{
     	pos = NUM_DIGITS - abs(pos % NUM_DIGITS);
 	}
-    
+
 	//call library step function
 	step(delta*4);
 }
@@ -52,7 +61,7 @@ void toZero()
 
 	onZeroTriggered();
 	/*for now just set pos to 0
-	 
+
 	while( !zeroTrigger )
 	{
     	//perhaps spin continuously here, rather than increment?
