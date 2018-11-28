@@ -56,31 +56,9 @@ void spin( int32_t delta )
 
 void toZero()
 {
-  //interrupt when photogate triggered
-  uint32_t count = 0;
-
-  onZeroTriggered();
-  /*for now just set pos to 0
-   
-  while( !zeroTrigger )
-  {
-      //perhaps spin continuously here, rather than increment?
-      //this is so we can more precisely set the dial at 0, if off increment initially
-      spin( 1, false );
-      count++;
-
-      if( count >= NUM_DIGITS )
-      {
-          //photogate never triggered => problem
-          //exception of some kind?
-          break;
-      }
-
-      //adjust if overshoot (if photogate not currently triggered)
-  }*/
-
-  zeroTrigger = false;
-  return;
+    //interrupt when photogate triggered
+    //for testing, just spin until pos = 0;
+    spin( -pos );
 }
 
 void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
