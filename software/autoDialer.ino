@@ -70,7 +70,7 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
  
   Serial.println("Beginning a new combination now. Rotating three times first.");
   //dial combination digits
-  spin( 3*NUM_DIGITS );   //pickup 3 wheels
+  spin( 4*NUM_DIGITS );   //pickup 3 wheels
   delay(100);
  
   Serial.println("I just rotated three times. Going to first number now...");
@@ -78,7 +78,7 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   delay(100);
   
   Serial.println("Just got to first number. Going clockwise two turns now...");
-  spin( -2*NUM_DIGITS );  //pickup next 2 wheels
+  spin( -3*NUM_DIGITS );  //pickup next 2 wheels
   delay(100);
   
   Serial.println("Just rotated two times. Going to second number now...");
@@ -86,7 +86,7 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   delay(100);
   
   Serial.println("Just got to second number. Going counter clockwise one turn now...");
-  spin( 1*NUM_DIGITS );   //pickup last wheel
+  spin( 2*NUM_DIGITS );   //pickup last wheel
   delay(100);
   
   Serial.println("Just rotated one turn. Going to third number now...");
@@ -121,9 +121,9 @@ void loop()
 
   if(!halt)
   {
-  for( uint32_t z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
+  for( uint32_t x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
         for( uint32_t y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
-          for( uint32_t x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
+          for( uint32_t z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
           {
                   tryCombo( x, y, z );
           }
