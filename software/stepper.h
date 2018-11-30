@@ -78,9 +78,9 @@ For the steps we need to step for
 //  Serial.println((unsigned int) delaytime);
 
   if(dir == 1) { // spin ccw (high)
-    digitalWrite(driver.dir, HIGH);
-  } else { // spin cw (low)
     digitalWrite(driver.dir, LOW);
+  } else { // spin cw (low)
+    digitalWrite(driver.dir, HIGH);
   }
 
   delayMicroseconds(300); // at LEAST 25 us setup time on one tested driver
