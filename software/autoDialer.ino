@@ -15,7 +15,7 @@
 #define STEP_DIGIT 3  	/// dial step (2*tolerance of dial)
 
 //req for stepper.h
-#define SPEED 10000	/// not yet sure what units this has, but bigger is still faster
+#define SPEED 1000	/// not yet sure what units this has, but bigger is still faster
 #define MICROSTEPS 32
 #define ENABLE_PIN 5
 #define PULSE_PIN 7
