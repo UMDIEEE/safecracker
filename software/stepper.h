@@ -1,4 +1,5 @@
-#import <Arduino.h>
+#include <Arduino.h>
+
 ///////////
 //begin library global definitions
 // define a global variable of type struct stepperdriver called driver
@@ -68,7 +69,6 @@ For the steps we need to step for
   Wait for (time)
 
 */
-    Serial.println("step() just got called.");
   if(steps == 0)
     return;
 
@@ -76,7 +76,6 @@ For the steps we need to step for
   int i;
   int dir = steps / abs(steps);
   float delaytime = (float) 1000*60000 / (float) (driver.rpm * (float) driver.steps * (float) driver.microsteps * 2);
-//  Serial.println((unsigned int) delaytime);
 
   if(dir == 1) { // spin ccw (high)
     digitalWrite(driver.dir, LOW);
@@ -90,11 +89,9 @@ For the steps we need to step for
     digitalWrite(driver.enable, HIGH);
     digitalWrite(driver.pulse, HIGH);
     delayMicroseconds((unsigned int) delaytime);
-//    Serial.println(delaytime);
     digitalWrite(driver.enable, HIGH);
     digitalWrite(driver.pulse, LOW);
     delayMicroseconds((unsigned int) delaytime);
-//    Serial.println(delaytime);
   }
 
 /*

@@ -1,13 +1,15 @@
+#include <Arduino.h>
+
 ///////////
 //begin library global definitions
 // define a global variable of type struct stepperdriver called driver
 struct stepperdriver {
-  int enable; //enable pin number
-  int pulse; //pulse pin number
-  int dir; //direction pin number
-  int steps; //steps per revolution
-  int microsteps; //microsteps per step
-  int rpm; //rotation speed in rpm
+  long enable; //enable pin number
+  long pulse; //pulse pin number
+  long dir; //direction pin number
+  long steps; //steps per revolution
+  long microsteps; //microsteps per step
+  long rpm; //rotation speed in rpm
 } driver;
 //end library global definitions
 ///////////
@@ -27,7 +29,7 @@ void step(int steps);
 // initialize the stepperdriver struct
 void Stepper(int steps, int microsteps, int enable, int pulse, int dir) {
 //  Set enable, pulse, and direction pin numbers
-//  Set rpm to 0
+//  Set rpm to 0. NOTE: 'rpm' is not actually revolutions per minute!
 //  Set microsteps per step and steps per revolution
 
   driver.enable = enable;
@@ -74,12 +76,11 @@ For the steps we need to step for
   int i;
   int dir = steps / abs(steps);
   float delaytime = (float) 1000*60000 / (float) (driver.rpm * (float) driver.steps * (float) driver.microsteps * 2);
-//  Serial.println((unsigned int) delaytime);
 
   if(dir == 1) { // spin ccw (high)
-    digitalWrite(driver.dir, HIGH);
-  } else { // spin cw (low)
     digitalWrite(driver.dir, LOW);
+  } else { // spin cw (low)
+    digitalWrite(driver.dir, HIGH);
   }
 
   delayMicroseconds(300); // at LEAST 25 us setup time on one tested driver
@@ -88,11 +89,9 @@ For the steps we need to step for
     digitalWrite(driver.enable, HIGH);
     digitalWrite(driver.pulse, HIGH);
     delayMicroseconds((unsigned int) delaytime);
-//    Serial.println(delaytime);
     digitalWrite(driver.enable, HIGH);
     digitalWrite(driver.pulse, LOW);
     delayMicroseconds((unsigned int) delaytime);
-//    Serial.println(delaytime);
   }
 
 /*

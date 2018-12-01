@@ -1,5 +1,5 @@
 ////////////////////////////////
-/// Testbench for dial rotation/combination algorithm
+/// Dial rotation/combination
 /// Uses stepper.h as provided in the Electrical folder
 ////////////////////////////////
 
@@ -7,11 +7,15 @@
 #include <stdio.h>
 #include "stepper.h"
 
+//#define DEBUG	//put debug code in #ifdef block so we just need to remove this to remove debugging
+
+#define DBG_DELAY 200 /// debug delay b/w combo digits in tryCombo
+
 #define NUM_DIGITS 100  /// dial digit count
-#define STEP_DIGIT 3  /// dial step (2*tolerance of dial)
+#define STEP_DIGIT 3  	/// dial step (2*tolerance of dial)
 
 //req for stepper.h
-#define RPM 400
+#define SPEED 10000	/// not yet sure what units this has, but bigger is still faster
 #define MICROSTEPS 32
 #define ENABLE_PIN 5
 #define PULSE_PIN 7
@@ -30,26 +34,23 @@ void onZeroTriggered()
 }
 
 /// Spins dial a number of increments
-// Sets pos to a value between 0 and 99 which corresponds to a position on the dial. Also spins the motor delta increments. 
-// If delta>0, spins dial on safe counterclockwise (positive on unit circle)
+// delta > 0 => ccw, delta < 0 => cw (looking down at motor shaft)
+// Sets pos to a value between 0 and 99 which corresponds to a position on the dial. Also spins the motor delta increments.
 void spin( int32_t delta )
 {
   pos = pos + delta;
   int mult = (int)(pos / NUM_DIGITS);
-  if(pos >= NUM_DIGITS)
+  pos = pos - mult*NUM_DIGITS; 
+  if(pos < 0)
   {
-    pos = pos - mult*NUM_DIGITS; 
-  }
-  else if(pos < 0)
-  {
-    pos = pos + NUM_DIGITS*(1 - mult);
+    pos = pos + NUM_DIGITS;
   }
   
   //call library step function
   step(delta*4);
+  
   return;
 }
-
 
 void toZero()
 {
@@ -60,41 +61,47 @@ void toZero()
 
 void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 {
+#ifdef DEBUG 
+  Serial.println("Reset and try combo:");
+  Serial.println(c0);Serial.println(c1);Serial.println(c2);
+  delay(DBG_DELAY*2);
+#endif
+
   toZero();
 
-  // Wasn't revolving enough times b/w combo digits
-  //  incremented multiples by 1, but hasn't been tested yet
- 
-  Serial.println("Beginning a new combination now. Rotating three times first.");
   //dial combination digits
-  spin( 4*NUM_DIGITS );   //pickup 3 wheels
-  delay(100);
- 
-  Serial.println("I just rotated three times. Going to first number now...");
-  spin( c0 - pos );     //set wheel 0 to c0
-  delay(100);
   
-  Serial.println("Just got to first number. Going clockwise two turns now...");
-  spin( -3*NUM_DIGITS );  //pickup next 2 wheels
-  delay(100);
-  
-  Serial.println("Just rotated two times. Going to second number now...");
-  spin( (c1 - pos <= 0) ? c1 - pos : c1 - pos - NUM_DIGITS ); //set wheel 1 to c1
-  delay(100);
-  
-  Serial.println("Just got to second number. Going counter clockwise one turn now...");
-  spin( 2*NUM_DIGITS );   //pickup last wheel
-  delay(100);
-  
-  Serial.println("Just rotated one turn. Going to third number now...");
-  spin( (c2 - pos >= 0) ? c2 - pos : c2 - pos - NUM_DIGITS ); //set wheel 2
-  delay(100);
-  
-  Serial.println("Got to third number. Doing other stuff before starting again......"); 
- 
+#ifdef DEBUG 
+  Serial.println("Going to first number...");
+  delay(DBG_DELAY);
+#endif
 
-  //spin once to see if safe opens
-  //check for stall
+  spin( (c0 - pos > 0) ? c0 - pos : c0 - pos + NUM_DIGITS );
+  spin( 3*NUM_DIGITS ); //stop when dial mark reaches c0 second time
+
+#ifdef DEBUG 
+  Serial.println("Going to second number");
+  delay(DBG_DELAY);
+#endif
+
+  spin( (c1 - pos < 0) ? c1 - pos : c1 - pos - NUM_DIGITS );
+  spin( -2*NUM_DIGITS ); //stop when dial mark reaches c1 third time
+
+#ifdef DEBUG 
+  Serial.println("Going to third number");
+  delay(DBG_DELAY);
+#endif
+
+  spin( (c2 - pos > 0) ? c2 - pos : c2 - pos + NUM_DIGITS );
+  spin( NUM_DIGITS ); //stop when dial mark reaches c2 second time
+  
+#ifdef DEBUG
+  Serial.println("Checking combination...");
+  delay(DBG_DELAY);
+#endif
+
+  //TODO: spin once to see if safe opens
+  //just spin around for now
   spin( -NUM_DIGITS );
   return;
 }
@@ -102,29 +109,21 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 void setup()
 {
   Stepper(NUM_DIGITS, MICROSTEPS, ENABLE_PIN, PULSE_PIN, DIR_PIN);
-  setSpeed(RPM);
+  setSpeed(SPEED);
   Serial.begin(9600);
+  
+  //code to run once goes here
 }
 
 void loop()
 {
   toZero();
-  
-  bool halt = false;
- 
-  //step(NUM_DIGITS*4);
-  //setSpeed(300);
-  //step(-NUM_DIGITS*4);
 
-  if(!halt)
-  {
   for( uint32_t x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
         for( uint32_t y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
           for( uint32_t z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
           {
                   tryCombo( x, y, z );
           }
-  }
-
-  halt = true;
 }
+
