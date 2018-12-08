@@ -6,16 +6,60 @@
 #include <math.h>
 #include <stdio.h>
 #include "stepper.h"
+#include <SoftwareSerial.h>
 
-//#define DEBUG	//put debug code in #ifdef block so we just need to remove this to remove debugging
+//for displaying to LCD
+SoftwareSerial LCD(10, 11); // Arduino SS_RX = pin 10 (unused), Arduino SS_TX = pin 11 
+
+//LCD Instructions:
+void clear_display()
+{
+     LCD.write(0xFE); //command flag
+     LCD.write(0x01); 
+}
+
+void cursor_to_line_1()
+{
+    LCD.write(0xFE); //command flag
+    LCD.write(128); //position
+}
+
+//Put cursor to beginning of line 2:
+void cursor_to_line_2()
+ {
+    LCD.write(0xFE); //command flag
+    LCD.write(192); //position
+ }
+
+//Move cursor right by one:
+void cursor_right_1()
+{
+    LCD.write(254);
+    LCD.write(20);
+}
+
+void print_combo(int x,int y,int z)
+{
+  LCD.write("Trying: ");
+  cursor_right_1();
+  LCD.print(x,DEC);
+  LCD.print(" ");
+  LCD.print(y,DEC);
+  LCD.print(" ");
+  LCD.print(z,DEC);
+  LCD.write(254);
+  LCD.write(128);
+  cursor_to_line_1();
+}
+//#define DEBUG  //put debug code in #ifdef block so we just need to remove this to remove debugging
 
 #define DBG_DELAY 200 /// debug delay b/w combo digits in tryCombo
 
 #define NUM_DIGITS 100  /// dial digit count
-#define STEP_DIGIT 3  	/// dial step (2*tolerance of dial)
+#define STEP_DIGIT 3    /// dial step (2*tolerance of dial)
 
 //req for stepper.h
-#define SPEED 1000	/// not yet sure what units this has, but bigger is still faster
+#define SPEED 1000  /// not yet sure what units this has, but bigger is still faster
 #define MICROSTEPS 32
 #define ENABLE_PIN 5
 #define PULSE_PIN 7
@@ -112,6 +156,17 @@ void setup()
   setSpeed(SPEED);
   Serial.begin(9600);
   
+  LCD.begin(9600); // set up serial port for 9600 baud
+  delay(500); // wait for display to boot up
+
+  clear_display(); 
+  
+  LCD.write("Beginning Safe Cracking Now...");
+  delay(3000);
+
+ clear_display();
+  
+ cursor_to_line_1();
   //code to run once goes here
 }
 
@@ -123,7 +178,11 @@ void loop()
         for( uint32_t y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
           for( uint32_t z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
           {
+                  
+                  print_combo(x,y,z);
                   tryCombo( x, y, z );
+                  clear_display();
+                  
+                  
           }
 }
-
