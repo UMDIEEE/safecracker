@@ -3,6 +3,12 @@
 /// Uses stepper.h as provided in the Electrical folder
 ////////////////////////////////
 
+/*Instructions for wire connections:
+Connect the Anode of an LED to pin 8, and the cathode to ground. 
+Connect the SIG terminal of the photogate to pin 2 (and PWR to 5V, GRND to ground)
+Connect the motor pins 
+
+*/
 #include <math.h>
 #include <stdio.h>
 #include "stepper.h"
@@ -64,9 +70,17 @@ void print_combo(int x,int y,int z)
 #define ENABLE_PIN 5
 #define PULSE_PIN 7
 #define DIR_PIN 6
+#define INTERRUPT_PIN 2
+#define LED_PIN 8
 
-int32_t pos = 0;
+volatile int32_t pos = 0; //value will be changed in the ISR, so should be declared volatile
 bool zeroTrigger = false;
+
+//variable below is purely for user debugging
+//------------------------------------
+volatile byte ledState = HIGH;
+//----------------------------------
+
 
 //should be tied to photogate with Arduino interrupt
 //will want trigger to happen on rising edge, not while input is HIGH (infinite trigger)
@@ -74,6 +88,13 @@ void onZeroTriggered()
 {
   zeroTrigger = true;
   pos = 0;
+
+  //the LED will change value each time photogate is interrupted. can delete two lines of code below after satisfied with results
+  digitalWrite(LED_PIN, ledState);
+  ledState = !ledState;
+
+
+  
   return;
 }
 
@@ -155,6 +176,9 @@ void setup()
   Stepper(NUM_DIGITS, MICROSTEPS, ENABLE_PIN, PULSE_PIN, DIR_PIN);
   setSpeed(SPEED);
   Serial.begin(9600);
+  pinMode(INTERRUPT_PIN, INPUT_PULLUP); //make pin 2 an interrupt pin
+  attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, LOW);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
+  pinMode(LED_PIN, OUTPUT);
   
   LCD.begin(9600); // set up serial port for 9600 baud
   delay(500); // wait for display to boot up
