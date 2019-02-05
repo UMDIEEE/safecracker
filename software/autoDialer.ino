@@ -6,7 +6,7 @@
 /*Instructions for wire connections:
 Connect the Anode of an LED to pin 8, and the cathode to ground. 
 Connect the SIG terminal of the photogate to pin 2 (and PWR to 5V, GRND to ground)
-Connect the motor pins 
+Connect the motor's PUL+ to 5V (power); connect PUL- to pin 7, DIR- to pin 6, and ENA- to pin 5.
 
 */
 #include <math.h>
