@@ -177,7 +177,7 @@ void setup()
   setSpeed(SPEED);
   Serial.begin(9600);
   pinMode(INTERRUPT_PIN, INPUT_PULLUP); //make pin 2 an interrupt pin
-  attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, LOW);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
+  attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, FALLING);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
   pinMode(LED_PIN, OUTPUT);
   
   LCD.begin(9600); // set up serial port for 9600 baud
