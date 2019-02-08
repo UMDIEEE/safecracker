@@ -65,13 +65,13 @@ void print_combo(int x,int y,int z)
 #define STEP_DIGIT 3    /// dial step (2*tolerance of dial)
 
 //req for stepper.h
-#define SPEED 1000  /// not yet sure what units this has, but bigger is still faster
+#define SPEED 800  /// not yet sure what units this has, but bigger is still faster
 #define MICROSTEPS 32
 #define ENABLE_PIN 5
 #define PULSE_PIN 7
 #define DIR_PIN 6
 #define INTERRUPT_PIN 2
-#define LED_PIN 8
+#define LED_PIN 13
 
 volatile int32_t pos = 0; //value will be changed in the ISR, so should be declared volatile
 bool zeroTrigger = false;
@@ -120,8 +120,15 @@ void spin( int32_t delta )
 void toZero()
 {
     //interrupt when photogate triggered
+  while(digitalRead(2) == HIGH)
+  {
+    step(-4);
+  }
+  delay(1000);
+  pos = 0;
     //for testing, just spin until pos = 0;
-    spin( -pos );
+    //spin( -pos );
+    
 }
 
 void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
@@ -177,7 +184,7 @@ void setup()
   setSpeed(SPEED);
   Serial.begin(9600);
   pinMode(INTERRUPT_PIN, INPUT_PULLUP); //make pin 2 an interrupt pin
-  attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, FALLING);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
+  //attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, FALLING);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
   pinMode(LED_PIN, OUTPUT);
   
   LCD.begin(9600); // set up serial port for 9600 baud
