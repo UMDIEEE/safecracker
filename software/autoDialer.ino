@@ -17,7 +17,10 @@ Connect the motor's PUL+ to 5V (power); connect PUL- to pin 4, DIR- to pin 3, an
  * Now, begin executing the triple for loop, starting with 0,0,0. Each time the photogate is interrupted, call currentPosition(), which returns the current position in microsteps, relative to the 0 position. positive values are clockwise past 0. Check if the currentPosition is greater than REVOLUTION/100 steps away from zero. If so, that means that the motor thought it was more than a digit off. If that's the case, call setCurrentPosition(0) and redo the combination. Otherwise, just call setCurrentPosition(0).
  * If, for some reason, the motor speed slows down as a result of resetting position to zero after tripping the photogate, we might have to live with only resetting the position to zero every n_th time the photogate gets tripped and hope the accumulated error is small enough. This is something that we need to test.
  * Also, the convention used in the first program is that positive rotations are in accordance with positive direction on the unit circle (i.e. a positive rotation would be the counterclockwise). The AccelStepper.h library uses the opposite convention. Rather than flip all of the signs in the code that we have already wrriten, try flipping the wiring of the phase A and B between the motor and driver.
- * If, for some reason, this doesn't work, then go back into the code and flip every sign in the argument to a stepper.move() call. You may need to do more than this.
+ * If, for some reason, this doesn't work, then go back into the code and flip every sign in the argument to a stepper.move() call. You may need to do more than this. Finally, there is a chance thtat if all of the above causes no problems, something else might cause a problem- we don't know what exactly happens under the hood when the setCurrentPosition(0) function is called. One possible problem is this:
+ * in our code, we calculate the amount of steps we would like to move to get from our current position to the next position in the tryCombo() function. Then, we call stepper.move() that amount of steps, and then keep on checking if we have reached that amount of steps in a while loop. And while we haven't reached that number of steps, we call stepper.run() in order to rotate the motor. At some point during the motor's rotation, the interrupt gets tripped and a function gets called which sets the current position to 0. The question is:
+ * is the targetPosition variable (the one that keeps track of whether or not we have rotated the amount of steps that we said we would) going to change in order to reflect the fact that our current position was changed? For example, if we initially start at digit 5 and calculate that we would like to rotate the dial clockwise by 110 digits to end up at digit 95, which sets the internal targetPosition equal to [105 digits * (the # of steps per digit)], when we cross 0, there are still [5 digits * (# of steps per digit)] steps left to rotate. But
+ * is it true that the targetPosition will be updated under the hood when we cross 0 to equal [5 * (# steps per digit)] steps left?
  * 
  */
  
@@ -134,7 +137,7 @@ void onZeroTriggered()
   }
   else
   {
-    if(stepper.currentPosition() > STEPS_PER_DIGIT) //if motor thinks it is more than a single digit away from where it actually is when dial passes 0
+    if(stepper.currentPosition() > STEPS_PER_DIGIT || stepper.currentPosition() < -STEPS_PER_DIGIT) //if motor thinks it is more than a single digit away from where it actually is when dial passes 0
     {
       tryComboAgain = 1;
     }
@@ -160,7 +163,7 @@ static inline void updatePosition(int32_t delta)
   {
       pos = pos % NUM_DIGITS;
   }
-  return;
+  
 }
 
 void toZero()
@@ -168,7 +171,7 @@ void toZero()
    //interrupt when photogate triggered
   while(digitalRead(INTERRUPT_PIN) == HIGH)
   {
-    if(zeroTrigger)
+    if(zeroTrigger)   //this condition is here so that if the above condition in the while loop is not being evaluated at the precise moment when the photogate is blocked, we will still be able to jump out of the loop and return as long as the ISR has been called.
     {
        pos = 0;
        return;
@@ -203,10 +206,18 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
   delta = (c0 - pos > 0) ? c0 - pos : c0 - pos + NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT );
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
 
   delta = 3*NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c0 second time
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
   
 #ifdef DEBUG 
@@ -216,11 +227,19 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
   delta = (c1 - pos < 0) ? c1 - pos : c1 - pos - NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT );
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
 
   
   delta = -2*NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c1 third time
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
 
 #ifdef DEBUG 
@@ -231,10 +250,18 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
   delta = (c2 - pos > 0) ? c2 - pos : c2 - pos + NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT );
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
 
   delta = NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c2 second time
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
   
 #ifdef DEBUG
@@ -246,6 +273,10 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
   delta = -NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT );
+  while(stepper.distanceToGo() != 0)
+  {
+    stepper.run();
+  }
   updatePosition(delta);
   return;
 }
