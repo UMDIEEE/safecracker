@@ -5,24 +5,21 @@
 /// consider calling disableOutputs from library once safe has been opened. It will shut off power to motor pins and save power.
 ////////////////////////////////
 
+//NOTE: Go into library and set velocity and acceleration to zero when we call the toZero function to fix the glitch!
+
 /*Instructions for wire connections:
 Connect the Anode of an LED to pin 8, and the cathode to ground. 
 Connect the SIG terminal of the photogate to pin 2 (and PWR to 5V, GRND to ground)
 Connect the motor's PUL+ to 5V (power); connect PUL- to pin 4, DIR- to pin 3, and ENA- to pin 5.
+Connect the Rx terminal of the LCD display to pin 11 of Arduino (and PWR to 5V, GRND to ground)
 */
 
 
-/*The goal of the code is as follows: first, call call toZero(), which will keep rotating the motor clockwise until the photogate gets tripped. At this point, the motor will be stopped. Call setCurrentPosition(0), which will set the internal class variable that keeps track of the motor's position back to zero.
- * As a consequence of this function call, it sets the current speed to 0. I'm not sure if that will cause problems when we call this function every time the photogate gets tripped. We might have to follow that call with a call to a function which changes the current speed back to whatever value it was at when the motor was crossing the photogate (or a value close to it). This remains to be tested. 
- * Now, begin executing the triple for loop, starting with 0,0,0. Each time the photogate is interrupted, call currentPosition(), which returns the current position in microsteps, relative to the 0 position. positive values are clockwise past 0. Check if the currentPosition is greater than REVOLUTION/100 steps away from zero. If so, that means that the motor thought it was more than a digit off. If that's the case, call setCurrentPosition(0) and redo the combination. Otherwise, just call setCurrentPosition(0).
- * If, for some reason, the motor speed slows down as a result of resetting position to zero after tripping the photogate, we might have to live with only resetting the position to zero every n_th time the photogate gets tripped and hope the accumulated error is small enough. This is something that we need to test.
- * Also, the convention used in the first program is that positive rotations are in accordance with positive direction on the unit circle (i.e. a positive rotation would be the counterclockwise). The AccelStepper.h library uses the opposite convention. Rather than flip all of the signs in the code that we have already wrriten, try flipping the wiring of the phase A and B between the motor and driver.
- * If, for some reason, this doesn't work, then go back into the code and flip every sign in the argument to a stepper.move() call. You may need to do more than this. Finally, there is a chance thtat if all of the above causes no problems, something else might cause a problem- we don't know what exactly happens under the hood when the setCurrentPosition(0) function is called. One possible problem is this:
- * in our code, we calculate the amount of steps we would like to move to get from our current position to the next position in the tryCombo() function. Then, we call stepper.move() that amount of steps, and then keep on checking if we have reached that amount of steps in a while loop. And while we haven't reached that number of steps, we call stepper.run() in order to rotate the motor. At some point during the motor's rotation, the interrupt gets tripped and a function gets called which sets the current position to 0. The question is:
- * is the targetPosition variable (the one that keeps track of whether or not we have rotated the amount of steps that we said we would) going to change in order to reflect the fact that our current position was changed? For example, if we initially start at digit 5 and calculate that we would like to rotate the dial clockwise by 110 digits to end up at digit 95, which sets the internal targetPosition equal to [105 digits * (the # of steps per digit)], when we cross 0, there are still [5 digits * (# of steps per digit)] steps left to rotate. But
- * is it true that the targetPosition will be updated under the hood when we cross 0 to equal [5 * (# steps per digit)] steps left?
- * 
+/*Left to do: figure out (calculate-yes it is possible) when the position variable will overflow. Before it does, have a condition in the triple for loop that says: "right before the position overflows and before I try the next combination,
+ * return to 0 and call setCurrentPosition(0) again. If it will overflow twice throughout the entire safe cracking, then fix it a second (or third or fourth) time! But don't spend too much time doing things other than trying combinations. 
  */
+
+ //Sign convention for this code: the DIAL will rotate clockwise if you provide a negative argument to stepper.move() and CCW for a positive argument. This follows the sign convention of the unit circle. Note that this means the motor itself rotates in the opposite direction- it's a matter of perspective.
  
 #include <math.h>
 #include <stdio.h>
@@ -30,7 +27,7 @@ Connect the motor's PUL+ to 5V (power); connect PUL- to pin 4, DIR- to pin 3, an
 #include <AccelStepper.h>
 #include <SoftwareSerial.h>
 
-//for displaying to LCD
+//for displaying to LCD, connect Rx to pin 11 on Arduino (and power to 5V, ground to ground)
 
 SoftwareSerial LCD(10, 11); // Arduino SS_RX = pin 10 (unused), Arduino SS_TX = pin 11 
 
@@ -105,13 +102,20 @@ void print_combo(int x,int y,int z)
 
 #define STEPS_PER_DIGIT 64
 
+#define HALF_REV 3200
+
 
 volatile int32_t pos = 0; //value will be changed in the ISR, so should be declared volatile
 volatile int32_t delta = 0;  //value represents the amount of DIGITS to move
+volatile float saved_speed;
+volatile long saved_target;
+volatile long saved_position;
+volatile uint32_t opened = 0;
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);  //object of class AccelStepper using library
-bool zeroTrigger = false;
 bool beenTriggeredBefore = false;
 bool tryComboAgain = false;
+
+bool finish_with_call = false;
 //variable below is purely for user debugging
 
 //------------------------------------
@@ -120,31 +124,43 @@ volatile byte ledState = HIGH;
 
 //----------------------------------
 
-//should be tied to photogate with Arduino interrupt
+
 
 //will want trigger to happen on rising edge, not while input is HIGH (infinite trigger)
 
 void onZeroTriggered()
 {
-  if(!beenTriggeredBefore)
+  opened = opened + 1;
+  
+  int dif = 0; long library_pos = 0; int modded_pos = 0;
+   
+  
+  if(!beenTriggeredBefore)  //if the photogate is being tripped by the toZero() function (assuming the toZero() function is called prior to any other movements of the motor)
   {
-    stepper.move(0);
-    zeroTrigger = true;
-    
-    //the LED will change value each time photogate is interrupted. can delete two lines of code below after satisfied with results
-    //digitalWrite(LED_PIN, ledState);
-    //ledState = !ledState;
+    stepper.move(0);        //have the motor come to a stop. You MUST then call run() so the motor can physically decelerate to 0. 
+    beenTriggeredBefore = 1;
+    return;
   }
-  else
-  {
-    if(stepper.currentPosition() > STEPS_PER_DIGIT || stepper.currentPosition() < -STEPS_PER_DIGIT) //if motor thinks it is more than a single digit away from where it actually is when dial passes 0
+  else{
+    library_pos = stepper.currentPosition();
+    
+    modded_pos = library_pos % REVOLUTION;
+    
+    dif = REVOLUTION - modded_pos;
+    if( dif > HALF_REV)
     {
-      tryComboAgain = 1;
+      stepper.setCurrentPosition(library_pos - modded_pos,0);
+      
+      
     }
+    else
+    {
+      stepper.setCurrentPosition(library_pos + dif,0);
+      //Serial.print("Set the current position to: ");
+      //Serial.println(library_pos + dif);
+    }
+  }  
     
-  }
-
-  stepper.setCurrentPosition(0);
   return;
 }
 
@@ -152,65 +168,60 @@ void onZeroTriggered()
 //delta is the number of digits on the dial you wish to rotate. This function will update the global 'pos' variable to reflect where the new position should be after the motor rotates delta digits on the dial.
 static inline void updatePosition(int32_t delta)
 {
+  delta  = delta % 100;
  //pos gets updated to reflect the amount that the dial turns (delta amount) since the last value of pos
-  pos = (pos - delta)%NUM_DIGITS;
+  pos = (delta + pos)%NUM_DIGITS;
   if( pos < 0 )      //if (pos - delta) is negative, then modulus will return a negative number (in C and Java). We need a positive number. ex: -3 mod 100 will return -3. Need it to return 97.
   {
       pos = pos + NUM_DIGITS;
   }
-  
-  if( (pos >= NUM_DIGITS) || (pos < 0) )
-  {
-      pos = pos % NUM_DIGITS;
-  }
-  
+ return;
 }
 
 void toZero()
 {
    //interrupt when photogate triggered
+  
   while(digitalRead(INTERRUPT_PIN) == HIGH)
   {
-    if(zeroTrigger)   //this condition is here so that if the above condition in the while loop is not being evaluated at the precise moment when the photogate is blocked, we will still be able to jump out of the loop and return as long as the ISR has been called.
+    if(beenTriggeredBefore)   //this condition is here so that if the above condition in the while loop is not being evaluated at the precise moment when the photogate is blocked, we will still be able to jump out of the loop and return as long as the ISR has been called.
     {
        pos = 0;
+       stepper.setCurrentPosition(0,1);
+       delay(3000);
        return;
     }
-    stepper.move(2*REVOLUTION);  //revolution/1000
+    stepper.move(-3*REVOLUTION);  
     while(stepper.distanceToGo() != 0)
     {
       stepper.run();
     }
-    stepper.run();
   }
 
   pos = 0;
+  stepper.setCurrentPosition(0,1);
+  
+  delay(3000);
   return;
-
 }
 
 void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 {
-#ifdef DEBUG 
-  Serial.println("Reset and try combo:");
-  Serial.println(c0);Serial.println(c1);Serial.println(c2);
-  delay(DBG_DELAY*2);
-#endif
-
-  //dial combination digits
-
-#ifdef DEBUG 
-  Serial.println("Going to first number...");
-  delay(DBG_DELAY);
-#endif
-
-  delta = (c0 - pos > 0) ? c0 - pos : c0 - pos + NUM_DIGITS;
-  stepper.move( delta*STEPS_PER_DIGIT );
+  
+  /*Serial.println("Beginning a new combination now.");
+  Serial.println("Current position: ");
+  Serial.println(pos);
+  Serial.println("Going to first digit now");
+  */
+  delay(1000);
+  delta = (c0 - pos >= 0) ? c0 - pos : c0 - pos + NUM_DIGITS;
+  stepper.move( delta*STEPS_PER_DIGIT );    //going CCW to first digit. argument to stepper.move() better be positive.
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  delay(1000);
 
   delta = 3*NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c0 second time
@@ -219,19 +230,20 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
     stepper.run();
   }
   updatePosition(delta);
-  
-#ifdef DEBUG 
-  Serial.println("Going to second number");
-  delay(DBG_DELAY);
-#endif
+  delay(1000);
 
-  delta = (c1 - pos < 0) ? c1 - pos : c1 - pos - NUM_DIGITS;
+  Serial.println("Just stopped at the 1st digit which is at position: ");
+  Serial.println(pos);
+  Serial.println("Going to 2nd digit now.");
+  
+  delta = (c1 - pos < 0) ? c1 - pos : c1 - pos - NUM_DIGITS;    //going CW to second digit. argument to stepper.move() better be negative.
   stepper.move( delta*STEPS_PER_DIGIT );
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  //delay(1000);
 
   
   delta = -2*NUM_DIGITS;
@@ -241,20 +253,19 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
     stepper.run();
   }
   updatePosition(delta);
+  Serial.println("Just stopped at the 2nd digit which is at position: ");
+  Serial.println(pos);
+  Serial.println("Going to third digit now.");
+  delay(1000);
 
-#ifdef DEBUG 
-  Serial.println("Going to third number");
-  delay(DBG_DELAY);
-#endif
-
-
-  delta = (c2 - pos > 0) ? c2 - pos : c2 - pos + NUM_DIGITS;
+  delta = (c2 - pos > 0) ? c2 - pos : c2 - pos + NUM_DIGITS;    //going CCW to third digit. Argument to stepper.move() better be positive.
   stepper.move( delta*STEPS_PER_DIGIT );
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  //delay(1000);
 
   delta = NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c2 second time
@@ -263,12 +274,13 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
     stepper.run();
   }
   updatePosition(delta);
+  Serial.println("Just stopped at 3rd digit which is at position: ");
+  Serial.println(pos);
+  Serial.println("Now rotating once around to see if safe opens");
+  delay(1000);
   
-#ifdef DEBUG
-  Serial.println("Checking combination...");
-  delay(DBG_DELAY);
-#endif
-
+  opened = 0;
+  
   // rotate around once to see if safe opens
 
   delta = -NUM_DIGITS;
@@ -278,8 +290,31 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
     stepper.run();
   }
   updatePosition(delta);
+  Serial.println("Just rotated 1 revolution around and stopped at position: ");
+  Serial.println(pos);
+  delay(1000);
+
+  beenTriggeredBefore = 0;
+  toZero(); 
+  
+  if(c2 == 0) //if the third digit is 0, then rotating around one REV at the end will increment opened to 1. And then going toZero() won't increment opened to 2 b/c the dial is already at 0. So increment opened by 1. Now, if it's still less than 2, we know that the dial never made it back to 0.
+  {opened ++;}
+  
+  if(opened < 2)
+  {
+    Serial.println("We are about to cease the program");
+    ceaseProgram();
+  }
+  pos = 0;
   return;
 }
+
+void ceaseProgram(void)
+{
+  while(1){Serial.println("We are in cease program");} 
+}
+
+
 
 void setup()
 {
@@ -295,8 +330,8 @@ void setup()
 
   //pinMode(LED_PIN, OUTPUT);
 
-  stepper.setMaxSpeed(REVOLUTION*1.5);
-  stepper.setAcceleration(REVOLUTION);
+  stepper.setMaxSpeed(REVOLUTION*0.5);
+  stepper.setAcceleration(2*REVOLUTION);
   stepper.moveTo(REVOLUTION);
 
   LCD.begin(9600); // set up serial port for 9600 baud
@@ -308,16 +343,19 @@ void setup()
   clear_display(); 
 
   LCD.write("Beginning Safe Cracking Now...");
-
+  Serial.println("Delaying for three seconds...");
   delay(3000);
- clear_display();
- cursor_to_line_1();
+  clear_display();
+  cursor_to_line_1();
   //code to run once goes here
 }
 
 void loop()
 {
+ 
+  Serial.println("Calling toZero() ");
   toZero();
+
 
   for( uint32_t x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
 
