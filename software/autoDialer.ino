@@ -27,6 +27,8 @@ Connect the Rx terminal of the LCD display to pin 11 of Arduino (and PWR to 5V, 
 #include <AccelStepper.h>
 #include <SoftwareSerial.h>
 
+#define DEBUG_DELAY 0
+
 //for displaying to LCD, connect Rx to pin 11 on Arduino (and power to 5V, ground to ground)
 
 SoftwareSerial LCD(10, 11); // Arduino SS_RX = pin 10 (unused), Arduino SS_TX = pin 11 
@@ -181,27 +183,31 @@ static inline void updatePosition(int32_t delta)
 void toZero()
 {
    //interrupt when photogate triggered
+   int quit = 0;
   
-  while(digitalRead(INTERRUPT_PIN) == HIGH)
+  while(digitalRead(INTERRUPT_PIN) == HIGH && !quit)
   {
     if(beenTriggeredBefore)   //this condition is here so that if the above condition in the while loop is not being evaluated at the precise moment when the photogate is blocked, we will still be able to jump out of the loop and return as long as the ISR has been called.
     {
        pos = 0;
        stepper.setCurrentPosition(0,1);
-       delay(3000);
+       if(DEBUG_DELAY)
+       {delay(3000);}
        return;
     }
-    stepper.move(-3*REVOLUTION);  
+    stepper.move( (long) -1.1*REVOLUTION);  
     while(stepper.distanceToGo() != 0)
     {
       stepper.run();
     }
+    quit = 1;   //have the function quit once it gets to the beginning of the while loop again. We only want this function to rotate 1.1 times times once. If photogate isn't tripped, something is wrong (or safe has been cracked). We don't want to be stuck in this loop if beenTriggeredBefore never gets set to one in the IRS.
   }
 
   pos = 0;
   stepper.setCurrentPosition(0,1);
   
-  delay(3000);
+  if(DEBUG_DELAY)
+  {delay(3000);}
   return;
 }
 
@@ -213,16 +219,17 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   Serial.println(pos);
   Serial.println("Going to first digit now");
   */
-  delay(1000);
+  if(DEBUG_DELAY)
+  {delay(1000);}
   delta = (c0 - pos >= 0) ? c0 - pos : c0 - pos + NUM_DIGITS;
-  stepper.move( delta*STEPS_PER_DIGIT );    //going CCW to first digit. argument to stepper.move() better be positive.
+  stepper.move( delta*STEPS_PER_DIGIT  + 3*NUM_DIGITS*STEPS_PER_DIGIT );    //going CCW to first digit. argument to stepper.move() better be positive.
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  /*
   delay(1000);
-
   delta = 3*NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c0 second time
   while(stepper.distanceToGo() != 0)
@@ -230,36 +237,40 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
     stepper.run();
   }
   updatePosition(delta);
-  delay(1000);
+  */
+  if(DEBUG_DELAY)
+  {delay(1000);}
+ 
 
   Serial.println("Just stopped at the 1st digit which is at position: ");
   Serial.println(pos);
   Serial.println("Going to 2nd digit now.");
   
   delta = (c1 - pos < 0) ? c1 - pos : c1 - pos - NUM_DIGITS;    //going CW to second digit. argument to stepper.move() better be negative.
-  stepper.move( delta*STEPS_PER_DIGIT );
+  stepper.move( delta*STEPS_PER_DIGIT  -2*NUM_DIGITS*STEPS_PER_DIGIT );
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
-  //delay(1000);
 
-  
-  delta = -2*NUM_DIGITS;
+  //delay(1000);
+  /*delta = -2*NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c1 third time
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  */
   Serial.println("Just stopped at the 2nd digit which is at position: ");
   Serial.println(pos);
   Serial.println("Going to third digit now.");
-  delay(1000);
+  if(DEBUG_DELAY)
+  {delay(1000);}
 
   delta = (c2 - pos > 0) ? c2 - pos : c2 - pos + NUM_DIGITS;    //going CCW to third digit. Argument to stepper.move() better be positive.
-  stepper.move( delta*STEPS_PER_DIGIT );
+  stepper.move( delta*STEPS_PER_DIGIT    +NUM_DIGITS*STEPS_PER_DIGIT );
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
@@ -267,17 +278,19 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   updatePosition(delta);
   //delay(1000);
 
-  delta = NUM_DIGITS;
+  /*delta = NUM_DIGITS;
   stepper.move( delta*STEPS_PER_DIGIT ); //stop when dial mark reaches c2 second time
   while(stepper.distanceToGo() != 0)
   {
     stepper.run();
   }
   updatePosition(delta);
+  */
   Serial.println("Just stopped at 3rd digit which is at position: ");
   Serial.println(pos);
   Serial.println("Now rotating once around to see if safe opens");
-  delay(1000);
+  if(DEBUG_DELAY)
+  {delay(1000);}
   
   opened = 0;
   
@@ -292,7 +305,8 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   updatePosition(delta);
   Serial.println("Just rotated 1 revolution around and stopped at position: ");
   Serial.println(pos);
-  delay(1000);
+  if(DEBUG_DELAY)
+  {delay(1000);}
 
   beenTriggeredBefore = 0;
   toZero(); 
@@ -303,15 +317,39 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   if(opened < 2)
   {
     Serial.println("We are about to cease the program");
-    ceaseProgram();
+    ceaseProgram(c0, c1, c2);
   }
   pos = 0;
   return;
 }
 
-void ceaseProgram(void)
+void ceaseProgram(int c0, int c1, int c2)
 {
-  while(1){Serial.println("We are in cease program");} 
+  while(1)
+  {
+    if(digitalRead(ENABLE_PIN) == HIGH )
+      digitalWrite(ENABLE_PIN, LOW);
+    
+    clear_display();
+    cursor_to_line_1();
+    LCD.write('C'); delay(500);  LCD.write('O'); delay(500); LCD.write('N'); delay(500); LCD.write('G'); delay(500); LCD.write('R'); delay(500); LCD.write('A'); delay(500); LCD.write('D'); delay(500); LCD.write('S'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('Y'); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('V'); delay(500);
+    LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('T'); delay(500); LCD.write('S'); delay(500); LCD.write('M'); delay(500); LCD.write('A'); delay(500); LCD.write('R'); delay(500); LCD.write('T'); delay(500); LCD.write('E'); delay(500); LCD.write('D'); delay(500); LCD.write(' '); delay(500);
+    LCD.write('A'); delay(500); LCD.write(' '); delay(500); LCD.write('B'); delay(500); LCD.write('R'); delay(500); LCD.write('I'); delay(500); LCD.write('C'); delay(500); LCD.write('K'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('T'); delay(500); LCD.write('H'); delay(500); LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('C'); delay(500); 
+    LCD.write('O'); delay(500); LCD.write('M'); delay(500); LCD.write('B'); delay(500); LCD.write('O'); delay(500); LCD.write(' '); delay(500); LCD.write('I'); delay(500); LCD.write('S'); delay(500); LCD.write(':'); delay(500); LCD.write(' ');
+    LCD.print(c0,DEC);
+    LCD.print(" ");
+    LCD.print(c1,DEC);
+    LCD.print(" ");
+    LCD.print(c2,DEC);
+    cursor_right_1();
+    
+    while(1)
+    {
+      //do nothing
+    }
+  } 
+
+  
 }
 
 
@@ -330,8 +368,8 @@ void setup()
 
   //pinMode(LED_PIN, OUTPUT);
 
-  stepper.setMaxSpeed(REVOLUTION*0.5);
-  stepper.setAcceleration(2*REVOLUTION);
+  stepper.setMaxSpeed(REVOLUTION*1);  //good speed: 0.5 * REVOLUTION
+  stepper.setAcceleration(2*REVOLUTION); //good acceleration: 2 * REVOLUTION
   stepper.moveTo(REVOLUTION);
 
   LCD.begin(9600); // set up serial port for 9600 baud
@@ -352,6 +390,8 @@ void setup()
 
 void loop()
 {
+
+
  
   Serial.println("Calling toZero() ");
   toZero();
@@ -367,7 +407,7 @@ void loop()
 
                   print_combo(x,y,z);
 
-                  tryCombo( x, y, z );
+                  tryCombo( x, y, z);
 
                   if(tryComboAgain) //if the amount of error between where the motor thinks it is when the dial crosses 0 and where it actually is is greater than a single digit, redo the combo again.
                   {z -= STEP_DIGIT; tryComboAgain = 0;}
