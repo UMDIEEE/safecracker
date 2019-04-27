@@ -135,7 +135,7 @@ void onZeroTriggered()
   opened = opened + 1;
   tripped = !tripped;
   int dif = 0; long library_pos = 0; int modded_pos = 0;
-   
+   digitalWrite(13, tripped);
   
   if(!beenTriggeredBefore)  //if the photogate is being tripped by the toZero() function (assuming the toZero() function is called prior to any other movements of the motor)
   {
@@ -361,9 +361,9 @@ void setup()
   pinMode(ENABLE_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
-  
+  pinMode(13, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW);
-
+  digitalWrite(13, LOW);
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, FALLING);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
 
   //pinMode(LED_PIN, OUTPUT);
