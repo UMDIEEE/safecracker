@@ -20,25 +20,71 @@ Connect the Rx terminal of the LCD display to pin 11 of Arduino (and PWR to 5V, 
  */
 
  //Sign convention for this code: the DIAL will rotate clockwise if you provide a negative argument to stepper.move() and CCW for a positive argument. This follows the sign convention of the unit circle. Note that this means the motor itself rotates in the opposite direction- it's a matter of perspective.
- 
+
+/*
+ Includes
+ */
 #include <math.h>
 #include <stdio.h>
-//#include "stepper.h" //using AccelStepper.h now to control acceleration and velocity
 #include <AccelStepper.h>
 #include <SoftwareSerial.h>
 
-#define DEBUG_DELAY 0
+
+/*
+ defines
+ */
+////////// delays and debugs //////////
+#define DEBUG_DELAY     0 // boolean, 0 for no forced delays, 1 for forced delays
+#define DBG_DELAY       200 /// debug delay b/w combo digits in tryCombo
+
+////////// pin definitions ///////////
+#define INTERRUPT_PIN   2 // wire photointerruptor to this pin here
+#define ENABLE_PIN      5 // arduino digital pin for ENA (enable, on holds motor, off releases the motor
+#define STEP_PIN        4 // arduino digital pin for STEP (pulse moves stepper motor by one step or microstep)
+#define DIR_PIN         3 // arduino digital pin for DIR (sets direction)
+#define ONBOARD_LED     13
+
+////////// motor parameters //////////
+#define MICROSTEPS      32 // microsteps per step
+
+////////// safe parameters //////////
+#define NUM_DIGITS      100  /// dial digit count
+#define STEP_DIGIT      3    /// dial step (2*tolerance of dial)
+
+////////// control parameters //////////
+#define REVOLUTION      6400  // = microsteps per step (driver config) * steps per revolution (motor spec) = pulses per revolution
+#define HALF_REV        REVOLUTION / 2
+#define STEPS_PER_DIGIT 64 //microsteps per step (driver config) * steps per digit (motor + safe spec)
+
+
+/*
+ global variables
+ */
+////////// position //////////
+volatile int32_t pos = 0; //value will be changed in the ISR (interrupt handler), so should be declared volatile (can change at any time)
+volatile int32_t delta = 0;  //value represents the amount of DIGITS to move
+//volatile float saved_speed;
+//volatile long saved_target;
+volatile long saved_position;
+
+////////// flags and states //////////
+volatile uint32_t opened = 0; //incremented on interrupted
+volatile bool tripped = 0;  //inverted on interrupt
+bool beenTriggeredBefore = false;
+bool finish_with_call = false;
+volatile byte ledState = HIGH;
+
+////////// objects ///////////
+SoftwareSerial LCD(10, 11); // Arduino SS_RX = pin 10 (unused), Arduino SS_TX = pin 11
+AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);  //object of class AccelStepper using library
 
 //for displaying to LCD, connect Rx to pin 11 on Arduino (and power to 5V, ground to ground)
-
-SoftwareSerial LCD(10, 11); // Arduino SS_RX = pin 10 (unused), Arduino SS_TX = pin 11 
-
 //LCD Instructions:
 
 void clear_display()
 {
-     LCD.write(0xFE); //command flag
-     LCD.write(0x01); 
+    LCD.write(0xFE); //command flag
+    LCD.write(0x01);
 }
 
 void cursor_to_line_1()
@@ -50,81 +96,34 @@ void cursor_to_line_1()
 //Put cursor to beginning of line 2:
 
 void cursor_to_line_2()
- {
+{
     LCD.write(0xFE); //command flag
     LCD.write(192); //position
- }
+}
 
 //Move cursor right by one:
 void cursor_right_1()
 
 {
-
+    
     LCD.write(254);
     LCD.write(20);
 }
 
 void print_combo(int x,int y,int z)
 {
-  LCD.write("Trying: ");
-  cursor_right_1();
-  LCD.print(x,DEC);
-  LCD.print(" ");
-  LCD.print(y,DEC);
-  LCD.print(" ");
-  LCD.print(z,DEC);
-  LCD.write(254);
-  LCD.write(128);
-  cursor_to_line_1();
-
+    LCD.write("Trying: ");
+    cursor_right_1();
+    LCD.print(x,DEC);
+    LCD.print(" ");
+    LCD.print(y,DEC);
+    LCD.print(" ");
+    LCD.print(z,DEC);
+    LCD.write(254);
+    LCD.write(128);
+    cursor_to_line_1();
+    
 }
-
-
-//#define DEBUG  //put debug code in #ifdef block so we just need to remove this to remove debugging
-
-#define DBG_DELAY 200 /// debug delay b/w combo digits in tryCombo
-
-#define NUM_DIGITS 100  /// dial digit count
-
-#define STEP_DIGIT 3    /// dial step (2*tolerance of dial)
-
-#define MICROSTEPS 32
-
-#define ENABLE_PIN 5
-
-#define STEP_PIN 4
-
-#define DIR_PIN 3
-
-#define INTERRUPT_PIN 2
-
-//#define LED_PIN 13  //for LED display
-
-#define REVOLUTION 6400  //macro representing the amount of steps/revolution that the motor achieves, which we configured on the driver. It, and STEPS_PER_DIGIT below, are used often as arguments to functions, which often require the argument as a number of steps
-
-#define STEPS_PER_DIGIT 64
-
-#define HALF_REV 3200
-
-
-volatile int32_t pos = 0; //value will be changed in the ISR, so should be declared volatile
-volatile int32_t delta = 0;  //value represents the amount of DIGITS to move
-volatile float saved_speed;
-volatile long saved_target;
-volatile long saved_position;
-volatile uint32_t opened = 0;
-volatile bool tripped = 0;  //flag used to address race condition in while loop in toZero(). Instead of conditioning on distanceToGo()!=0, we condition on whether the photogate has been tripped
-AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);  //object of class AccelStepper using library
-bool beenTriggeredBefore = false;
-
-bool finish_with_call = false;
-//variable below is purely for user debugging
-
-//------------------------------------
-
-volatile byte ledState = HIGH;
-
-//----------------------------------
 
 
 
@@ -325,17 +324,24 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
 void ceaseProgram(int c0, int c1, int c2)
 {
-  while(1)
-  {
-    if(digitalRead(ENABLE_PIN) == HIGH )
-      digitalWrite(ENABLE_PIN, LOW);
-    
-    clear_display();
-    cursor_to_line_1();
-    LCD.write('C'); delay(500);  LCD.write('O'); delay(500); LCD.write('N'); delay(500); LCD.write('G'); delay(500); LCD.write('R'); delay(500); LCD.write('A'); delay(500); LCD.write('D'); delay(500); LCD.write('S'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('Y'); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('V'); delay(500);
-    LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('T'); delay(500); LCD.write('S'); delay(500); LCD.write('M'); delay(500); LCD.write('A'); delay(500); LCD.write('R'); delay(500); LCD.write('T'); delay(500); LCD.write('E'); delay(500); LCD.write('D'); delay(500); LCD.write(' '); delay(500);
-    LCD.write('A'); delay(500); LCD.write(' '); delay(500); LCD.write('B'); delay(500); LCD.write('R'); delay(500); LCD.write('I'); delay(500); LCD.write('C'); delay(500); LCD.write('K'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('T'); delay(500); LCD.write('H'); delay(500); LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('C'); delay(500); 
-    LCD.write('O'); delay(500); LCD.write('M'); delay(500); LCD.write('B'); delay(500); LCD.write('O'); delay(500); LCD.write(' '); delay(500); LCD.write('I'); delay(500); LCD.write('S'); delay(500); LCD.write(':'); delay(500); LCD.write(' ');
+while(1)
+    {
+        if(digitalRead(ENABLE_PIN) == HIGH )
+          digitalWrite(ENABLE_PIN, LOW);
+      
+        clear_display();
+        cursor_to_line_1();
+      
+      char *finishmessage = "CONGRATS. YOU HAVE OUTSMARTED A BRICK. THE COMBO IS:";
+      for (int i = 0; i < strlen(finishmessage); i++) {
+          LCD.write(finishmessage(i));
+          delay(500);
+      }
+      
+//    LCD.write('C'); delay(500);  LCD.write('O'); delay(500); LCD.write('N'); delay(500); LCD.write('G'); delay(500); LCD.write('R'); delay(500); LCD.write('A'); delay(500); LCD.write('D'); delay(500); LCD.write('S'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('Y'); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('V'); delay(500);
+//    LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('O'); delay(500); LCD.write('U'); delay(500); LCD.write('T'); delay(500); LCD.write('S'); delay(500); LCD.write('M'); delay(500); LCD.write('A'); delay(500); LCD.write('R'); delay(500); LCD.write('T'); delay(500); LCD.write('E'); delay(500); LCD.write('D'); delay(500); LCD.write(' '); delay(500);
+//    LCD.write('A'); delay(500); LCD.write(' '); delay(500); LCD.write('B'); delay(500); LCD.write('R'); delay(500); LCD.write('I'); delay(500); LCD.write('C'); delay(500); LCD.write('K'); delay(500); LCD.write('.'); delay(500); LCD.write(' '); delay(500); LCD.write('T'); delay(500); LCD.write('H'); delay(500); LCD.write('E'); delay(500); LCD.write(' '); delay(500); LCD.write('C'); delay(500);
+//    LCD.write('O'); delay(500); LCD.write('M'); delay(500); LCD.write('B'); delay(500); LCD.write('O'); delay(500); LCD.write(' '); delay(500); LCD.write('I'); delay(500); LCD.write('S'); delay(500); LCD.write(':'); delay(500); LCD.write(' ');
     LCD.print(c0,DEC);
     LCD.print(" ");
     LCD.print(c1,DEC);
