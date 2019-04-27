@@ -113,9 +113,9 @@ volatile float saved_speed;
 volatile long saved_target;
 volatile long saved_position;
 volatile uint32_t opened = 0;
+volatile bool tripped = 0;  //flag used to address race condition in while loop in toZero(). Instead of conditioning on distanceToGo()!=0, we condition on whether the photogate has been tripped
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);  //object of class AccelStepper using library
 bool beenTriggeredBefore = false;
-bool tryComboAgain = false;
 
 bool finish_with_call = false;
 //variable below is purely for user debugging
@@ -133,9 +133,9 @@ volatile byte ledState = HIGH;
 void onZeroTriggered()
 {
   opened = opened + 1;
-  
+  tripped = !tripped;
   int dif = 0; long library_pos = 0; int modded_pos = 0;
-   
+   digitalWrite(13, tripped);
   
   if(!beenTriggeredBefore)  //if the photogate is being tripped by the toZero() function (assuming the toZero() function is called prior to any other movements of the motor)
   {
@@ -184,7 +184,7 @@ void toZero()
 {
    //interrupt when photogate triggered
    int quit = 0;
-  
+   bool localTripped = tripped;
   while(digitalRead(INTERRUPT_PIN) == HIGH && !quit)
   {
     if(beenTriggeredBefore)   //this condition is here so that if the above condition in the while loop is not being evaluated at the precise moment when the photogate is blocked, we will still be able to jump out of the loop and return as long as the ISR has been called.
@@ -196,7 +196,7 @@ void toZero()
        return;
     }
     stepper.move( (long) -1.1*REVOLUTION);  
-    while(stepper.distanceToGo() != 0)
+    while(tripped == localTripped)
     {
       stepper.run();
     }
@@ -361,9 +361,9 @@ void setup()
   pinMode(ENABLE_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
-  
+  pinMode(13, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW);
-
+  digitalWrite(13, LOW);
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), onZeroTriggered, FALLING);  //associate pin 2 on UNO with interrupt function. onZeroTriggered gets called whenever pin 2 goes low. connect the SIG terminal of photogate to pin 2 on the UNO. 
 
   //pinMode(LED_PIN, OUTPUT);
@@ -396,21 +396,23 @@ void loop()
   Serial.println("Calling toZero() ");
   toZero();
 
+  uint32_t x,y,z;
+  
+  x = 66; y = 0; z = 93;
+  
+  goto label;
+  for( x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
 
-  for( uint32_t x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
+        for( y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
 
-        for( uint32_t y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
-
-          for( uint32_t z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
+          for( z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
 
           {
 
+              label:
                   print_combo(x,y,z);
 
                   tryCombo( x, y, z);
-
-                  if(tryComboAgain) //if the amount of error between where the motor thinks it is when the dial crosses 0 and where it actually is is greater than a single digit, redo the combo again.
-                  {z -= STEP_DIGIT; tryComboAgain = 0;}
 
                   clear_display();
 
