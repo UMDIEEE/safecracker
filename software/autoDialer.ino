@@ -29,7 +29,7 @@ Connect the Rx terminal of the LCD display to pin 11 of Arduino (and PWR to 5V, 
 #include <AccelStepper.h>
 #include <SoftwareSerial.h>
 
-
+ 
 /*
  defines
  */
@@ -292,7 +292,11 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
   {delay(1000);}
   
   opened = 0;
-  
+ 
+  if(c2 == 0) //if the last digit is a 0, we want the ISR to call setCurrentPosition(0) as soon as the dial rotates once around, because it won't happen it toZero().
+  {
+    beenTriggeredBefore = 0;
+  }
   // rotate around once to see if safe opens
 
   delta = -NUM_DIGITS;
@@ -334,7 +338,7 @@ while(1)
       
       char *finishmessage = "CONGRATS. YOU HAVE OUTSMARTED A BRICK. THE COMBO IS:";
       for (int i = 0; i < strlen(finishmessage); i++) {
-          LCD.write(finishmessage(i));
+          LCD.write(finishmessage[i]);
           delay(500);
       }
       
@@ -401,24 +405,26 @@ void loop()
  
   Serial.println("Calling toZero() ");
   toZero();
-
+  delay(3000); //helps with calibrating the photogate
   uint32_t x,y,z;
+
+
+  //To jump to a specific combination, uncomment the next two lines of code
+  //x = 66; y = 0; z = 93;
+  //goto label;
   
-  x = 66; y = 0; z = 93;
-  
-  goto label;
   for( x = 0; x < NUM_DIGITS; x += STEP_DIGIT )
 
         for( y = 0; y < NUM_DIGITS; y += STEP_DIGIT )
 
-          for( z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
+          //for( z = 0; z < NUM_DIGITS; z += STEP_DIGIT )
 
           {
 
               label:
-                  print_combo(x,y,z);
+                  print_combo(x,y,3);                // print_combo(x,y,z);
 
-                  tryCombo( x, y, z);
+                  tryCombo( x, y, 3);                // tryCombo( x, y, z);
 
                   clear_display();
 
