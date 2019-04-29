@@ -29,7 +29,7 @@ Connect the Rx terminal of the LCD display to pin 11 of Arduino (and PWR to 5V, 
 #include <AccelStepper.h>
 #include <SoftwareSerial.h>
 
-
+ 
 /*
  defines
  */
