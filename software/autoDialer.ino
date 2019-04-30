@@ -322,6 +322,11 @@ void tryCombo( int32_t c0, int32_t c1, int32_t  c2 )
 
     opened = 0;
 
+    if(c2 == 0)
+    {
+        beenTriggeredBefore=0;
+    }
+
     // rotate around once to see if safe opens
 
     delta = -NUM_DIGITS;
