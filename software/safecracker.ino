@@ -1,4 +1,4 @@
-  #include "AccelStepper.h"
+    #include "AccelStepper.h"
   
   #define INTERRUPT_PIN 2 // wire photointerruptor to this pin here
 
@@ -26,16 +26,26 @@ void calibrate()
     {
         stepper.run();
     }
+    stepper.setCurrentPosition(0,0);
+    stepper.setMaxSpeed(REVOLUTION*100);  //good speed: 0.5 * REVOLUTION
 }
 
-void spin(int spin_count,int spin_to){
+void spin(int spin_count,int spin_to,int dir){
   //as a part of callibrate, set to zero
     int delta;
-    delta = (spin_to - dialPos >= 0) ? spin_to - dialPos : spin_to - dialPos + NUM_DIGITS;
-    stepper.move(delta*STEPS_PER_DIGIT  + 3*NUM_DIGITS*STEPS_PER_DIGIT);
-      {
-        stepper.run();
-      }
+
+    if(dir > 0)
+      delta = (spin_to - dialPos >= 0) ? spin_to - dialPos : (spin_to - dialPos) + NUM_DIGITS;
+    else
+      delta = (spin_to - dialPos <= 0) ? spin_to - dialPos : (spin_to - dialPos) - NUM_DIGITS;
+    
+    stepper.move(delta*STEPS_PER_DIGIT + dir*spin_count*NUM_DIGITS*STEPS_PER_DIGIT);
+    while(stepper.distanceToGo() != 0)
+    {
+       stepper.run();
+    }
+
+    dialPos = spin_to;
 }
  
  void setup() {
@@ -55,14 +65,15 @@ void spin(int spin_count,int spin_to){
 
 void loop() {
     //calibrate();
+
      for( x = 0; x < NUM_DIGITS; x += 1 )
         for( y = 0; y < NUM_DIGITS; y += 1 )
             for( z = 0; z < NUM_DIGITS; z += 1 )
             {
               calibrate();
-              spin(1,x);
-              spin(2,y);
-              spin(3,z);
+              spin(4,x,1);
+              spin(3,y,-1);
+              spin(2,z,1);
               delay(3000);
             }
    while(1){ //do nothing 
